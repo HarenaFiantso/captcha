@@ -1,100 +1,89 @@
-import React, {useState} from 'react';
+import axios, {AxiosError} from 'axios';
+import {useRef, useState} from 'react';
+import {useForm} from 'react-hook-form';
+import {useScriptLoader} from './hook/captcha';
+import {renderCaptcha} from './lib/captcha';
 
-const App = () => {
-    const [inputValue, setInputValue] = useState<number | ''>('');
-    const [sequence, setSequence] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+const client = axios.create({
+    baseURL: import.meta.env.VITE_API_URL
+});
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (typeof inputValue !== 'number' || inputValue < 1 || inputValue > 1000) {
-            alert('Veuillez entrer un nombre valide entre 1 et 1000.');
-            return;
-        }
+export type Form = {
+    num: number;
+}
 
-        setSequence([]);
-        setLoading(true);
+export default function App() {
+    useScriptLoader(import.meta.env.VITE_INTEGRATION_URL);
 
-        for (let i = 1; i <= inputValue; i++) {
-            try {
-                const line = await fetchData(i);
-                setSequence((prev) => [...prev, line]);
-                await delay(1000);
-            } catch (error) {
-                console.error('Erreur lors de l\'appel API', error);
-                setSequence((prev) => [...prev, `${i}. Erreur`]);
-            }
-        }
+    const ref = useRef<HTMLDivElement | null>(null);
 
-        setLoading(false);
-    };
+    const {register, handleSubmit, formState} = useForm<Form>();
+    const [messages, setMessage] = useState<number[]>([]);
+    const [last_stop, setStop] = useState(0);
 
-    const fetchData = async (index: number): Promise<string> => {
+    const sendWhoami = async (i: number) => {
         try {
-            const response = await fetch('https://api.prod.jcloudify.com/whoami', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({requestId: index}),
-            });
-
-            if (response.status === 403) {
-                await handleCaptcha();
-                return `${index}. Forbidden (Après Captcha)`;
+            const response = await client.get('/whoami');
+            console.log(response);
+        } catch (e) {
+            const error = e as AxiosError;
+            if (error.status === 403) {
+                setMessage(prev => prev.concat(i));
+            } else {
+                throw e;
             }
-
-            if (response.ok) {
-                return `${index}. Forbidden`;
-            }
-
-            return `${index}. Erreur (${response.status})`;
-        } catch (error) {
-            console.error('Erreur réseau :', error);
-            throw new Error('API Fail');
         }
-    };
+    }
 
-    const handleCaptcha = (): Promise<void> => {
-        return new Promise((resolve) => {
-            window.document.addEventListener('captcha-resolved', () => resolve(), {once: true});
-
-            console.log('Captcha demandé : Résolvez le Captcha pour continuer...');
+    const displayCaptcha = () => {
+        renderCaptcha(ref.current!, import.meta.env.VITE_API_KEY, {
+            onSuccess: async () => {
+                await sendRequests(last_stop);
+            }
         });
-    };
+    }
 
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const sendRequests = async (total: number) => {
+        if (total <= 0 || total > 1000) return;
+        let i = last_stop;
+        const interval = setInterval(() => {
+            sendWhoami(i)
+                .catch((error: AxiosError) => {
+                    if (error.status === 405) {
+                        displayCaptcha();
+                        setStop(i);
+                        clearInterval(interval);
+                    }
+                });
+            if (i >= total) {
+                clearInterval(interval);
+                return;
+            }
+            i++;
+        }, 1000);
+    }
+
+    const submitCount = async (form: Form) => {
+        return sendRequests(form.num);
+    }
 
     return (
-        <div style={{padding: '20px', fontFamily: 'Arial, sans-serif'}}>
-            <h1>Application Séquence AWS WAF</h1>
-            {!loading ? (
-                <form onSubmit={handleSubmit}>
-                    <label htmlFor="numberInput">
-                        Entrez un nombre entre 1 et 1000 :
-                    </label>
-                    <input
-                        id="numberInput"
-                        type="number"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(Number(e.target.value))}
-                        min="1"
-                        max="1000"
-                        required
-                    />
-                    <button type="submit">Soumettre</button>
-                </form>
-            ) : (
-                <p>Chargement...</p>
-            )}
-
-            <div style={{marginTop: '20px'}}>
-                {sequence.map((line, index) => (
-                    <div key={index}>{line}</div>
-                ))}
-            </div>
+        <div>
+            {
+                formState.isSubmitSuccessful
+                    ? messages.map(v => <div key={v}>{v}. Forbidden</div>)
+                    : (
+                        <form onSubmit={handleSubmit(submitCount)}>
+                            <input {...register(
+                                'num',
+                                {required: true, valueAsNumber: true}
+                            )}
+                            />
+                            <button type="submit">Submit</button>
+                        </form>
+                    )
+            }
+            <div id="captcha_container" ref={ref}></div>
         </div>
     );
-};
-
-export default App;
+}
