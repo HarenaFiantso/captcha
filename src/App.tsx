@@ -12,14 +12,14 @@ const App = () => {
             return;
         }
 
-        setSequence([]); // Reset the sequence
+        setSequence([]);
         setLoading(true);
 
         for (let i = 1; i <= inputValue; i++) {
             try {
                 const line = await fetchData(i);
                 setSequence((prev) => [...prev, line]);
-                await delay(1000); // Pause de 1 seconde entre chaque requête
+                await delay(1000);
             } catch (error) {
                 console.error('Erreur lors de l\'appel API', error);
                 setSequence((prev) => [...prev, `${i}. Erreur`]);
@@ -31,25 +31,34 @@ const App = () => {
 
     const fetchData = async (index: number): Promise<string> => {
         try {
-            const response = await fetch('https://api.prod.jcloudify.com/whoami');
+            const response = await fetch('https://api.prod.jcloudify.com/whoami', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({requestId: index}),
+            });
+
             if (response.status === 403) {
-                // WAF Captcha peut apparaître ici
                 await handleCaptcha();
                 return `${index}. Forbidden (Après Captcha)`;
             }
-            return `${index}. Forbidden`;
+
+            if (response.ok) {
+                return `${index}. Forbidden`;
+            }
+
+            return `${index}. Erreur (${response.status})`;
         } catch (error) {
-            console.error('Erreur réseau', error);
+            console.error('Erreur réseau :', error);
             throw new Error('API Fail');
         }
     };
 
     const handleCaptcha = (): Promise<void> => {
         return new Promise((resolve) => {
-            // Le script Captcha AWS est inclus dans le index.html (WAF JS SDK)
             window.document.addEventListener('captcha-resolved', () => resolve(), {once: true});
 
-            // Simuler l'ouverture du captcha
             console.log('Captcha demandé : Résolvez le Captcha pour continuer...');
         });
     };
