@@ -1,25 +1,32 @@
-export function loadScript(integration_url: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const id = 'aws_waf_captcha_integration_url';
-    if (document.getElementById(id)) return resolve();
+const SCRIPT_ID = 'aws_waf_captcha_integration_url';
 
-    const script = document.createElement('script');
-    script.id = id;
-    script.async = false;
-    script.src = integration_url;
-    script.type = 'text/javascript';
-    document.head.appendChild(script);
+export function loadScript(integrationUrl: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        if (document.getElementById(SCRIPT_ID)) {
+            resolve();
+            return;
+        }
 
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load aws waf cdn api'));
-  });
+        const script = document.createElement('script');
+        Object.assign(script, {
+            id: SCRIPT_ID,
+            async: false,
+            src: integrationUrl,
+            type: 'text/javascript',
+        });
+
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load AWS WAF CDN API'));
+
+        document.head.appendChild(script);
+    });
 }
 
-export function removeScript() {
-  const script = document.getElementById('aws_waf_captcha_integration_url');
-  if (script) {
-    script.onload = null;
-    script.onerror = null;
-    script.remove();
-  }
+export function removeScript(): void {
+    const script = document.getElementById(SCRIPT_ID);
+    if (script) {
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+    }
 }

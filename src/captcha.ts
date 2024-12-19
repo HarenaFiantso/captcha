@@ -1,8 +1,6 @@
-import {AxiosInstance} from 'axios';
 import {useEffect, useState} from 'react';
-import {loadScript, removeScript} from "./script.ts";
-import {renderCaptcha, RendererCaptchaOptions} from "./renderer.ts";
-import {createAxiosInterceptor} from "./interceptor.ts";
+import {loadScript, removeScript} from "./script";
+
 
 export function useScriptLoader(integration_url: string) {
     const [error, setError] = useState<Error | null>(null);
@@ -18,40 +16,4 @@ export function useScriptLoader(integration_url: string) {
         error,
         success: error === null,
     };
-}
-
-export type AutoCaptchaOptions = {
-    api_key: string;
-    integration_url: string;
-    container: HTMLElement | null;
-    cross_domain_request?: boolean;
-    render_options?: Omit<RendererCaptchaOptions, 'onError' | 'onSuccess'>;
-};
-
-export function useAutoCaptcha(client: AxiosInstance, options: AutoCaptchaOptions) {
-    const {error: script_error} = useScriptLoader(options.integration_url);
-
-    useEffect(() => {
-        if (script_error) return;
-
-        return createAxiosInterceptor(
-            client,
-            () => {
-                return new Promise<string>((resolve, reject) => {
-                    if (options.container === null) {
-                        return reject(new Error('container is null'));
-                    }
-
-                    renderCaptcha(options.container, options.api_key, {
-                        onSuccess: resolve,
-                        onError: reject,
-                        ...options.render_options,
-                    });
-                });
-            },
-            {
-                cross_domain_request: options.cross_domain_request,
-            },
-        );
-    }, [client, options, script_error]);
 }
