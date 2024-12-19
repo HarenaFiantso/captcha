@@ -1,8 +1,8 @@
 import axios, {AxiosError} from 'axios';
 import {useRef, useState} from 'react';
 import {useForm} from 'react-hook-form';
-import {useScriptLoader} from './hook/captcha';
-import {renderCaptcha} from './lib/captcha';
+import {useScriptLoader} from './captcha.ts';
+import {renderCaptcha} from "./renderer.ts";
 
 const client = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
@@ -46,7 +46,6 @@ export default function App() {
     const displayCaptcha = () => {
         renderCaptcha(captchaContainerRef.current!, import.meta.env.VITE_API_KEY, {
             onSuccess: async () => {
-                // Continue sending requests after captcha resolution
                 await sendRequests(lastStop);
             },
         });
