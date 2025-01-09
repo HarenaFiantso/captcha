@@ -82,7 +82,7 @@ export default function App() {
             {...register('num', { required: true, valueAsNumber: true })}
           />
           <button type="submit">
-            Submit
+            Submitteo
           </button>
         </form>
       )}
