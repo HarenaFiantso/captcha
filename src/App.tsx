@@ -1,114 +1,104 @@
-import axios, {AxiosError} from 'axios';
-import {useRef, useState} from 'react';
-import {useForm} from 'react-hook-form';
-import {useScriptLoader} from './captcha.ts';
-import {renderCaptcha} from "./renderer.ts";
+import axios, { AxiosError } from 'axios';
+import { useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useScriptLoader } from './hook/captcha';
+import { renderCaptcha, RendererCaptchaOptions } from './lib/captcha';
 
 const client = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
+  baseURL: import.meta.env.VITE_API_URL,
 });
 
+const getWhoami = () => client.get('/whoami');
+
+const REQUEST_LIMIT = 1000;
+
 export type Form = {
-    num: number;
+  num: number;
 };
 
-export default function App() {
-    useScriptLoader(import.meta.env.VITE_INTEGRATION_URL);
+export function App() {
+  useScriptLoader(import.meta.env.VITE_INTEGRATION_URL);
 
-    const captchaContainerRef = useRef<HTMLDivElement | null>(null);
-    const {register, handleSubmit, formState} = useForm<Form>();
-    const [messages, setMessages] = useState<number[]>([]);
-    const [lastStop, setLastStop] = useState(0);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const { register, handleSubmit, formState } = useForm<Form>();
+  const [forbiddenCount, setForbiddenCount] = useState(0);
+  const [captchaDisplay, setCaptchaDisplay] = useState(false);
 
-    /**
-     * Sends a GET request to the `/whoami` endpoint.
-     * Handles specific status codes (e.g., 403).
-     */
-    const sendWhoami = async (index: number): Promise<void> => {
-        try {
-            const response = await client.get('/whoami');
-            console.log(response);
-        } catch (error) {
-            const axiosError = error as AxiosError;
+  const displayCaptcha = (options?: RendererCaptchaOptions) => {
+    if (!ref.current) return;
+    if (ref.current.children.length == 0) {
+      const subContainer = document.createElement('div');
+      ref.current.appendChild(subContainer);
+      renderCaptcha(subContainer, import.meta.env.VITE_API_KEY, options);
+      setCaptchaDisplay(true);
+    }
+  };
 
-            if (axiosError.response?.status === 403) {
-                // If 403 Forbidden, add to the message list
-                setMessages((prev) => [...prev, index]);
-            } else {
-                throw error;
-            }
+  const removeCaptcha = () => {
+    if (!ref.current || ref.current.children.length === 0) return;
+    ref.current.children.item(0)?.remove();
+    setCaptchaDisplay(false);
+  };
+
+  const sendRequests = async (total: number) => {
+    if (total <= 0 || total > REQUEST_LIMIT) return;
+    const interval = setInterval(() => {
+      if (forbiddenCount >= total) {
+        clearInterval(interval);
+        return;
+      }
+
+      getWhoami().catch((error: AxiosError) => {
+        switch (error.status) {
+          case 403: {
+            setForbiddenCount((prev) => prev + 1);
+            break;
+          }
+          case 405: {
+            clearInterval(interval);
+            const resetRequests = () => {
+              removeCaptcha();
+              const remainingRequest = total - forbiddenCount;
+              sendRequests(remainingRequest);
+            };
+            displayCaptcha({ onSuccess: resetRequests });
+            break;
+          }
+          default:
+            throw error;
         }
-    };
+      });
+    }, 1000);
+  };
 
-    /**
-     * Triggers the captcha rendering and resumes requests after successful captcha resolution.
-     */
-    const displayCaptcha = () => {
-        renderCaptcha(captchaContainerRef.current!, import.meta.env.VITE_API_KEY, {
-            onSuccess: async () => {
-                await sendRequests(lastStop);
-            },
-        });
-    };
+  const submitRequestCount = (form: Form) => sendRequests(form.num);
 
-    /**
-     * Sends multiple requests to `/whoami` endpoint at regular intervals (1 second).
-     * Stops on reaching the total or a 405 error (Captcha trigger).
-     */
-    const sendRequests = async (total: number) => {
-        if (total <= 0 || total > 1000) return;
+  return (
+    <div>
+      {!formState.isSubmitSuccessful && (
+        <form onSubmit={handleSubmit(submitRequestCount)}>
+          <input
+            placeholder="Enter request count"
+            {...register('num', { required: true, valueAsNumber: true })}
+          />
+          <button type="submit">Submit</button>
+        </form>
+      )}
 
-        let currentIndex = lastStop;
+      {!captchaDisplay &&
+        Array(forbiddenCount)
+          .fill('Forbidden')
+          .map((msg, i) => (
+            <div key={i}>
+              {i}. {msg}
+            </div>
+          ))}
 
-        const interval = setInterval(async () => {
-            try {
-                await sendWhoami(currentIndex);
-
-                if (currentIndex >= total) {
-                    clearInterval(interval);
-                }
-
-                currentIndex++;
-            } catch (error) {
-                const axiosError = error as AxiosError;
-
-                if (axiosError.response?.status === 405) {
-                    // Captcha required, stop the interval and display captcha
-                    clearInterval(interval);
-                    setLastStop(currentIndex);
-                    displayCaptcha();
-                }
-            }
-        }, 1000);
-    };
-
-    /**
-     * Form submission handler.
-     * Triggers the request sending process.
-     */
-    const submitCount = async (form: Form) => {
-        await sendRequests(form.num);
-    };
-
-    return (
-        <div>
-            {formState.isSubmitSuccessful ? (
-                // Display the forbidden messages list once the form is submitted
-                messages.map((msg) => <div key={msg}>{msg}. Forbidden</div>)
-            ) : (
-                // Render the form for user input
-                <form onSubmit={handleSubmit(submitCount)}>
-                    <input
-                        {...register('num', {required: true, valueAsNumber: true})}
-                        type="number"
-                        placeholder="Enter a number"
-                    />
-                    <button type="submit">Submit</button>
-                </form>
-            )}
-
-            {/* Captcha container */}
-            <div id="captcha_container" ref={captchaContainerRef}></div>
-        </div>
-    );
+      <div
+        ref={ref}
+        id="captcha_container"
+        style={captchaDisplay ? undefined : { display: 'none' }}
+      ></div>
+    </div>
+  );
 }
