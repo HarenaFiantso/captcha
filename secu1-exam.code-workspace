@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "secu1-exam",
+			"path": "."
+		},
+		{
+			"name": "waf-captcha",
+			"path": "../../../sideProject/waf-captcha"
+		},
+		{
+			"name": "react-aws-waf",
+			"path": "../../../sideProject/react-aws-waf"
+		}
+	],
+	"settings": {}
+}

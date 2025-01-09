@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useScriptLoader } from './hook/useScriptLoader';
+import { useScriptLoader } from './hook/captcha';
 import { renderCaptcha, RendererCaptchaOptions } from './lib/captcha';
 
 const client = axios.create({
@@ -16,7 +16,7 @@ export type Form = {
   num: number;
 };
 
-export default function App() {
+export function App() {
   useScriptLoader(import.meta.env.VITE_INTEGRATION_URL);
 
   const ref = useRef<HTMLDivElement | null>(null);
@@ -82,7 +82,7 @@ export default function App() {
             {...register('num', { required: true, valueAsNumber: true })}
           />
           <button type="submit">
-            Submitteo
+            Submit
           </button>
         </form>
       )}
