@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useScriptLoader } from './hook/captcha';
+import { useScriptLoader } from './hook/useScriptLoader';
 import { renderCaptcha, RendererCaptchaOptions } from './lib/captcha';
 
 const client = axios.create({
@@ -10,13 +10,13 @@ const client = axios.create({
 
 const getWhoami = () => client.get('/whoami');
 
-const REQUEST_LIMIT = 1000;
+const REQUEST_LIMIT= 1000;
 
 export type Form = {
   num: number;
 };
 
-export function App() {
+export default function App() {
   useScriptLoader(import.meta.env.VITE_INTEGRATION_URL);
 
   const ref = useRef<HTMLDivElement | null>(null);
@@ -25,49 +25,49 @@ export function App() {
   const [captchaDisplay, setCaptchaDisplay] = useState(false);
 
   const displayCaptcha = (options?: RendererCaptchaOptions) => {
-    if (!ref.current) return;
-    if (ref.current.children.length == 0) {
-      const subContainer = document.createElement('div');
+    if(!ref.current) return;
+    if(ref.current.children.length == 0){
+      const subContainer = document.createElement("div");
       ref.current.appendChild(subContainer);
       renderCaptcha(subContainer, import.meta.env.VITE_API_KEY, options);
       setCaptchaDisplay(true);
     }
-  };
+  }
 
   const removeCaptcha = () => {
-    if (!ref.current || ref.current.children.length === 0) return;
+    if(!ref.current || ref.current.children.length === 0) return;
     ref.current.children.item(0)?.remove();
     setCaptchaDisplay(false);
-  };
+  }
 
   const sendRequests = async (total: number) => {
     if (total <= 0 || total > REQUEST_LIMIT) return;
     const interval = setInterval(() => {
-      if (forbiddenCount >= total) {
+      if(forbiddenCount >= total){
         clearInterval(interval);
         return;
       }
 
-      getWhoami().catch((error: AxiosError) => {
-        switch (error.status) {
-          case 403: {
-            setForbiddenCount((prev) => prev + 1);
-            break;
+      getWhoami()
+        .catch((error: AxiosError) => {
+          switch (error.status) {
+            case 403: {
+              setForbiddenCount(prev => prev + 1);
+              break;
+            }
+            case 405: {
+              clearInterval(interval);
+              const resetRequests = () => {
+                removeCaptcha();
+                const remainingRequest = total - forbiddenCount;
+                sendRequests(remainingRequest);
+              }
+              displayCaptcha({ onSuccess: resetRequests });
+              break;
+            }
+            default: throw error;
           }
-          case 405: {
-            clearInterval(interval);
-            const resetRequests = () => {
-              removeCaptcha();
-              const remainingRequest = total - forbiddenCount;
-              sendRequests(remainingRequest);
-            };
-            displayCaptcha({ onSuccess: resetRequests });
-            break;
-          }
-          default:
-            throw error;
-        }
-      });
+        })
     }, 1000);
   };
 
@@ -81,18 +81,17 @@ export function App() {
             placeholder="Enter request count"
             {...register('num', { required: true, valueAsNumber: true })}
           />
-          <button type="submit">Submit</button>
+          <button type="submit">
+            Submit
+          </button>
         </form>
       )}
 
-      {!captchaDisplay &&
-        Array(forbiddenCount)
+      {
+        !captchaDisplay && Array(forbiddenCount)
           .fill('Forbidden')
-          .map((msg, i) => (
-            <div key={i}>
-              {i}. {msg}
-            </div>
-          ))}
+          .map((msg, i) => <div key={i}>{i}. {msg}</div>)
+      }
 
       <div
         ref={ref}
